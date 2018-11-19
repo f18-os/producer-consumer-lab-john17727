@@ -4,8 +4,6 @@ import threading
 import cv2
 import numpy as np
 import base64
-import queue
-import time
 
 def extractFrames(fileName, outputBuffer):
     # Initialize frame count 
@@ -134,15 +132,12 @@ extractionQueue = Queue()
 conversionQueue = Queue()
 
 # extract the frames
-#extractFrames(filename, extractionQueue)
 extract = threading.Thread(target=extractFrames, args=(filename, extractionQueue))
 
 # convert the frames
-#convertFrames(extractionQueue, conversionQueue)
 convert = threading.Thread(target=convertFrames, args=(extractionQueue, conversionQueue))
 
 # display the frames
-#displayFrames(conversionQueue)
 display = threading.Thread(target=displayFrames, args=(conversionQueue,))
 
 extract.start()
