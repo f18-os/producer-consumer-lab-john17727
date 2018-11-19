@@ -26,9 +26,9 @@ def extractFrames(fileName, outputBuffer):
         jpgAsText = base64.b64encode(jpgImage)
 
         # add the frame to the buffer
-        if not outputBuffer.full():
-            outputBuffer.put(jpgAsText)
-            time.sleep(.012)
+        emptyCountExt.acquire()
+        outputBuffer.put(jpgAsText)
+        fillCountExt.release()
        
         success,image = vidcap.read()
         print('Reading frame {} {}'.format(count, success))
@@ -39,84 +39,110 @@ def extractFrames(fileName, outputBuffer):
 
 def convertFrames(inputBuffer, outputBuffer):
     count = 0
-    while True:
-        while not inputBuffer.empty():
-            # get the next frame
-            frameAsText = inputBuffer.get()
+    while count < 738:
+        # get the next frame
+        fillCountExt.acquire()
+        frameAsText = inputBuffer.get()
+        emptyCountExt.release()
 
-            # decode the frame 
-            jpgRawImage = base64.b64decode(frameAsText)
+        # decode the frame 
+        jpgRawImage = base64.b64decode(frameAsText)
 
-            # convert the raw frame to a numpy array
-            jpgImage = np.asarray(bytearray(jpgRawImage), dtype=np.uint8)
+        # convert the raw frame to a numpy array
+        jpgImage = np.asarray(bytearray(jpgRawImage), dtype=np.uint8)
 
-            img = cv2.imdecode( jpgImage ,cv2.IMREAD_UNCHANGED)
+        # convert to an image
+        img = cv2.imdecode( jpgImage ,cv2.IMREAD_UNCHANGED)
 
-            grayscaleFrame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # set image to grayscale
+        grayscaleFrame = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-            success, jpgImage = cv2.imencode('.jpg', grayscaleFrame)
+        # convert image to jpg
+        success, jpgImage = cv2.imencode('.jpg', grayscaleFrame)
 
-            jpgAsText = base64.b64encode(jpgImage)
-            
-            # add the frame to the buffer
-            outputBuffer.put(jpgAsText)
+        # encode the frame
+        jpgAsText = base64.b64encode(jpgImage)
+        
+        # add the frame to the buffer
+        emptyCountCnv.acquire()
+        outputBuffer.put(jpgAsText)
+        fillCountCnv.release()
 
-            print("Converting frame {}".format(count))  
+        print("Converting frame {}".format(count))  
 
-            count += 1
+        count += 1
     print("Frame conversion complete")
-    return
-
 
 
 def displayFrames(inputBuffer):
     # initialize frame count
     count = 0
-    while True:
-        # go through each frame in the buffer until the buffer is empty
-        while not inputBuffer.empty():
-            # get the next frame
-            frameAsText = inputBuffer.get()
+    while count < 738:
+        # get the next frame
+        fillCountCnv.acquire()
+        frameAsText = inputBuffer.get()
+        emptyCountCnv.release()
 
-            # decode the frame 
-            jpgRawImage = base64.b64decode(frameAsText)
+        # decode the frame 
+        jpgRawImage = base64.b64decode(frameAsText)
 
-            # convert the raw frame to a numpy array
-            jpgImage = np.asarray(bytearray(jpgRawImage), dtype=np.uint8)
-            
-            # get a jpg encoded frame
-            img = cv2.imdecode( jpgImage ,cv2.IMREAD_UNCHANGED)
+        # convert the raw frame to a numpy array
+        jpgImage = np.asarray(bytearray(jpgRawImage), dtype=np.uint8)
+        
+        # get a jpg encoded frame
+        img = cv2.imdecode( jpgImage ,cv2.IMREAD_UNCHANGED)
 
-            print("Displaying frame {}".format(count))        
+        print("Displaying frame {}".format(count))        
 
-            # display the image in a window called "video" and wait 42ms
-            # before displaying the next frame
-            cv2.imshow("Video", img)
-            if cv2.waitKey(42) and 0xFF == ord("q"):
-                break
+        # display the image in a window called "video" and wait 42ms
+        # before displaying the next frame
+        cv2.imshow("Video", img)
+        if cv2.waitKey(42) and 0xFF == ord("q"):
+            break
 
-            count += 1
+        count += 1
 
     print("Finished displaying all frames")
     # cleanup the windows
     cv2.destroyAllWindows()
-    return
+
+class Queue:
+    def __init__(self, initArray = []):
+        self.a = []
+        self.a = [x for x in initArray]
+    def put(self, item):
+        self.a.append(item)
+    def get(self):
+        a = self.a
+        item = a[0]
+        del a[0]
+        return item
+    def __repr__(self):
+        return "Q(%s)" % self.a
 
 # filename of clip to load
 filename = 'clip.mp4'
 BUFF_SIZE = 10
 
+fillCountExt = threading.Semaphore(0)
+emptyCountExt = threading.Semaphore(BUFF_SIZE)
+fillCountCnv = threading.Semaphore(0)
+emptyCountCnv = threading.Semaphore(BUFF_SIZE)
+
 # shared queue  
-extractionQueue = queue.Queue(BUFF_SIZE)
-conversionQueue = queue.Queue(BUFF_SIZE)
+extractionQueue = Queue()
+conversionQueue = Queue()
 
 # extract the frames
+#extractFrames(filename, extractionQueue)
 extract = threading.Thread(target=extractFrames, args=(filename, extractionQueue))
 
 # convert the frames
+#convertFrames(extractionQueue, conversionQueue)
 convert = threading.Thread(target=convertFrames, args=(extractionQueue, conversionQueue))
 
 # display the frames
+#displayFrames(conversionQueue)
 display = threading.Thread(target=displayFrames, args=(conversionQueue,))
 
 extract.start()
