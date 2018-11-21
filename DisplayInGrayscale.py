@@ -32,16 +32,22 @@ def extractFrames(fileName, outputBuffer):
         print('Reading frame {} {}'.format(count, success))
         count += 1
 
+    emptyCountExt.acquire()
+    outputBuffer.put(True)
+    fillCountExt.release()
     print("Frame extraction complete")
     return
 
 def convertFrames(inputBuffer, outputBuffer):
     count = 0
-    while count < 738:
+    while True:
         # get the next frame
         fillCountExt.acquire()
         frameAsText = inputBuffer.get()
         emptyCountExt.release()
+
+        if frameAsText == True:
+            break
 
         # decode the frame 
         jpgRawImage = base64.b64decode(frameAsText)
@@ -69,17 +75,23 @@ def convertFrames(inputBuffer, outputBuffer):
         print("Converting frame {}".format(count))  
 
         count += 1
+    emptyCountCnv.acquire()
+    outputBuffer.put(True)
+    fillCountCnv.release()
     print("Frame conversion complete")
 
 
 def displayFrames(inputBuffer):
     # initialize frame count
     count = 0
-    while count < 738:
+    while True:
         # get the next frame
         fillCountCnv.acquire()
         frameAsText = inputBuffer.get()
         emptyCountCnv.release()
+
+        if frameAsText == True:
+            break
 
         # decode the frame 
         jpgRawImage = base64.b64decode(frameAsText)
@@ -117,6 +129,7 @@ class Queue:
         return item
     def __repr__(self):
         return "Q(%s)" % self.a
+
 
 # filename of clip to load
 filename = 'clip.mp4'
